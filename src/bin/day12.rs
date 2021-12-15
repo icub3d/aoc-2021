@@ -46,13 +46,11 @@ impl<'a> Node<'a> {
 				let two_visited = visited.iter().map(|(_, v)| v).filter(|v| v > &&1).count() > 0;
 				let this_visited = *visited.get(node.id).unwrap_or(&0);
 
-				// If we aren't allowing two, then we can't have visited this node before.
-				if !allow_two && this_visited > 0 {
-					continue;
-				}
-				// If we are allowing two, but two are visited already
-				// and this one is visited, we can't use it.
-				if two_visited && this_visited > 0 {
+				// If we aren't allowing two, then we can't have
+				// visited this node before.  If we are allowing two,
+				// but two are visited already and this one is
+				// visited, we can't use it.
+				if (!allow_two || two_visited) && this_visited > 0 {
 					continue;
 				}
 			}
