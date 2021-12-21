@@ -1,38 +1,28 @@
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::ops::{Add, Sub};
 
-#[derive(Debug)]
-struct Transform {
-	x: Point,
-	y: Point,
-	z: Point,
-}
+use itertools::Itertools;
 
-impl Transform {
-	fn new(x: Point, y: Point, z: Point) -> Self {
-		Self { x, y, z }
-	}
-
-	fn transform(&self, scanner: &Scanner) -> Scanner {
-		scanner
-			.iter()
-			.map(|beacon| {
-				Point::new(
-					self.x.x * beacon.x + self.x.y * beacon.y + self.x.z + beacon.z,
-					self.y.x * beacon.x + self.y.y * beacon.y + self.y.z + beacon.z,
-					self.z.x * beacon.x + self.z.y * beacon.y + self.z.z + beacon.z,
-				)
-			})
-			.collect()
-	}
-}
-
-#[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 struct Point {
 	x: isize,
 	y: isize,
 	z: isize,
+}
+
+impl Add for Point {
+	type Output = Self;
+	fn add(self, other: Self) -> Self {
+		Self::new(self.x + other.x, self.y + other.y, self.z + other.z)
+	}
+}
+
+impl Sub for Point {
+	type Output = Self;
+	fn sub(self, other: Self) -> Self {
+		Self::new(self.x - other.x, self.y - other.y, self.z - other.z)
+	}
 }
 
 impl Point {
@@ -40,13 +30,33 @@ impl Point {
 		Self { x, y, z }
 	}
 
-	fn add(&self, other: &Point) -> Point {
-		Point::new(self.x + other.x, self.y + other.y, self.z + other.z)
+	// Based on the axis of rotation change the values.
+	fn rotate(&self, axis: &Self) -> Self {
+		let mut rotated = self.clone();
+		// x-axis rotation
+		for _ in 0..axis.x {
+			let original_z = rotated.z;
+			rotated.z = rotated.y;
+			rotated.y = -original_z;
+		}
+
+		// y-axis rotation
+		for _ in 0..axis.y {
+			let original_z = rotated.z;
+			rotated.z = -rotated.x;
+			rotated.x = original_z;
+		}
+
+		// z-axis rotation
+		for _ in 0..axis.z {
+			let original_y = rotated.y;
+			rotated.y = rotated.x;
+			rotated.x = -original_y;
+		}
+
+		rotated
 	}
 
-	fn subtract(&self, other: &Point) -> Point {
-		Point::new(self.x - other.x, self.y - other.y, self.z - other.z)
-	}
 	fn manhattan_distance(&self, other: &Point) -> isize {
 		let x = self.x - other.x;
 		let y = self.y - other.y;
@@ -55,19 +65,52 @@ impl Point {
 	}
 }
 
+fn transforms() -> Vec<Point> {
+	let mut tt = Vec::new();
+
+	// I was doing all of these but it turns out many of them are
+	// similar, so we keep a list of rotations we've done and if we've
+	// already done it, we don't need to add it.
+	let mut known = HashSet::new();
+	for x in 0..=3 {
+		for y in 0..=3 {
+			for z in 0..=3 {
+				let transform = Point::new(x, y, z);
+				let rotations = (
+					Point::new(1, 0, 0).rotate(&transform),
+					Point::new(0, 1, 0).rotate(&transform),
+					Point::new(0, 0, 1).rotate(&transform),
+				);
+				if known.contains(&rotations) {
+					continue;
+				}
+				known.insert(rotations);
+				tt.push(Point::new(x, y, z));
+			}
+		}
+	}
+	tt
+}
+
 type Scanner = HashSet<Point>;
 
 fn attempt_match(first: &Scanner, second: &Scanner) -> Option<(Scanner, Point)> {
-	for transformer in TRANSFORMERS.iter() {
-		let transformed = transformer.transform(second);
-		for left in first.iter() {
-			for right in transformed.iter() {
-				let position = left.subtract(right);
-				println!("{:?} {:?}", position, transformer);
-				let translated = transformed.iter().map(|p| p.add(&position)).collect();
-				if first.intersection(&translated).count() >= 12 {
-					return Some((translated, position));
-				}
+	for transformer in transforms().iter() {
+		// Transform each of the second scanner's points.
+		let transformed = second
+			.iter()
+			.map(|p| p.rotate(transformer))
+			.collect::<Vec<Point>>();
+
+		// For each of the points, see if we can find a match. We can
+		// calculate the position of the scanners relative to each
+		// other based on the point, so we can translate all of the
+		// second position and see how many line up.
+		for (left, right) in first.iter().cartesian_product(transformed.iter()) {
+			let position = *left - *right;
+			let translated = transformed.iter().map(|p| *p + position).collect();
+			if first.intersection(&translated).count() >= 12 {
+				return Some((translated, position));
 			}
 		}
 	}
@@ -119,7 +162,6 @@ fn main() {
 
 				// Try to match and if we found one, update our information.
 				let found = attempt_match(oriented.get(&i).unwrap(), second);
-				std::process::exit(1);
 				if let Some((found, position)) = found {
 					println!("found: {} {} {}", i, j, completed.len());
 					oriented.insert(j, found);
@@ -142,129 +184,14 @@ fn main() {
 		acc.union(&s).cloned().collect::<Scanner>()
 	});
 	println!("p1: {}", p1.len());
-}
 
-lazy_static! {
-	static ref TRANSFORMERS: Vec<Transform> = vec![
-		Transform::new(
-			Point::new(-1, 0, 0),
-			Point::new(0, -1, 0),
-			Point::new(0, 0, 1)
-		),
-		Transform::new(
-			Point::new(-1, 0, 0),
-			Point::new(0, 0, -1),
-			Point::new(0, -1, 0)
-		),
-		Transform::new(
-			Point::new(-1, 0, 0),
-			Point::new(0, 0, 1),
-			Point::new(0, 1, 0)
-		),
-		Transform::new(
-			Point::new(-1, 0, 0),
-			Point::new(0, 1, 0),
-			Point::new(0, 0, -1)
-		),
-		Transform::new(
-			Point::new(0, -1, 0),
-			Point::new(-1, 0, 0),
-			Point::new(0, 0, -1)
-		),
-		Transform::new(
-			Point::new(0, -1, 0),
-			Point::new(0, 0, -1),
-			Point::new(1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, -1, 0),
-			Point::new(0, 0, 1),
-			Point::new(-1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, -1, 0),
-			Point::new(1, 0, 0),
-			Point::new(0, 0, 1)
-		),
-		Transform::new(
-			Point::new(0, 0, -1),
-			Point::new(-1, 0, 0),
-			Point::new(0, 1, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, -1),
-			Point::new(0, -1, 0),
-			Point::new(-1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, -1),
-			Point::new(0, 1, 0),
-			Point::new(1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, -1),
-			Point::new(1, 0, 0),
-			Point::new(0, -1, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, 1),
-			Point::new(-1, 0, 0),
-			Point::new(0, -1, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, 1),
-			Point::new(0, -1, 0),
-			Point::new(1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, 1),
-			Point::new(0, 1, 0),
-			Point::new(-1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, 0, 1),
-			Point::new(1, 0, 0),
-			Point::new(0, 1, 0)
-		),
-		Transform::new(
-			Point::new(0, 1, 0),
-			Point::new(-1, 0, 0),
-			Point::new(0, 0, 1)
-		),
-		Transform::new(
-			Point::new(0, 1, 0),
-			Point::new(0, 0, -1),
-			Point::new(-1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, 1, 0),
-			Point::new(0, 0, 1),
-			Point::new(1, 0, 0)
-		),
-		Transform::new(
-			Point::new(0, 1, 0),
-			Point::new(1, 0, 0),
-			Point::new(0, 0, -1)
-		),
-		Transform::new(
-			Point::new(1, 0, 0),
-			Point::new(0, -1, 0),
-			Point::new(0, 0, -1)
-		),
-		Transform::new(
-			Point::new(1, 0, 0),
-			Point::new(0, 0, -1),
-			Point::new(0, 1, 0)
-		),
-		Transform::new(
-			Point::new(1, 0, 0),
-			Point::new(0, 0, 1),
-			Point::new(0, -1, 0)
-		),
-		Transform::new(
-			Point::new(1, 0, 0),
-			Point::new(0, 1, 0),
-			Point::new(0, 0, 1)
-		),
-	];
+	// We've kept all the distances, so we just need to find the ones
+	// that are the furthest apart.
+	let p2 = positions
+		.clone()
+		.iter()
+		.cartesian_product(positions.iter())
+		.map(|(i, j)| i.manhattan_distance(j))
+		.max();
+	println!("p2: {:?}", p2);
 }
