@@ -33,7 +33,7 @@ impl Point {
 
 	// Based on the axis of rotation change the values.
 	fn rotate(&self, axis: &Self) -> Self {
-		let mut rotated = self.clone();
+		let mut rotated = *self;
 		// x-axis rotation
 		for _ in 0..axis.x {
 			let original_z = rotated.z;
@@ -144,8 +144,7 @@ fn main() {
 	let mut completed = HashSet::new();
 
 	// Part 2 - Manhattan distances.
-	let mut positions = Vec::new();
-	positions.push(Point::new(0, 0, 0));
+	let mut positions = vec![Point::new(0, 0, 0)];
 	loop {
 		for i in 0..scanners.len() {
 			// If this one is done, we don't need to check again. We
@@ -183,7 +182,7 @@ fn main() {
 					positions.push(*position);
 				});
 
-			completed.insert(i.clone());
+			completed.insert(i);
 		}
 
 		// Once we've done them all, we are finished.

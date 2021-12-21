@@ -50,7 +50,7 @@ impl Point {
 	}
 }
 
-fn apply(image: &HashMap<Point, char>, algo: &Vec<char>, void: &char) -> HashMap<Point, char> {
+fn apply(image: &HashMap<Point, char>, algo: &[char], void: &char) -> HashMap<Point, char> {
 	let mut handled = HashSet::new();
 	// Our new image after changes.
 	let mut new: HashMap<Point, char> = HashMap::new();
@@ -65,12 +65,12 @@ fn apply(image: &HashMap<Point, char>, algo: &Vec<char>, void: &char) -> HashMap
 			// Turn the window into it's characters.
 			let binary = window
 				.iter()
-				.map(|p| *image.get(&p).unwrap_or(void))
+				.map(|p| *image.get(p).unwrap_or(void))
 				.collect::<Vec<char>>();
 
 			// Get the value and put it into the image.
-			new.insert(p.clone(), algo[binary.to_usize()]);
-			handled.insert(p.clone());
+			new.insert(p, algo[binary.to_usize()]);
+			handled.insert(p);
 		}
 	}
 	new
@@ -102,10 +102,10 @@ fn print_image(image: &HashMap<Point, char>) {
 		for x in left..=right {
 			print!("{}", image.get(&Point::new(x, y)).unwrap_or(&'.'));
 		}
-		println!("");
+		println!();
 		y -= 1;
 	}
-	println!("");
+	println!();
 }
 
 fn main() {
