@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::ops::{Add, Sub};
 
 use itertools::Itertools;
+use rayon::prelude::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 struct Point {
@@ -137,8 +138,9 @@ fn main() {
 
 	// Part 1 - assume the first is oriented correctly and then try to
 	// orient the rest. Keep going until we've oriented them all.
-	let mut oriented: HashMap<usize, Scanner> = HashMap::new();
+	let mut oriented = HashMap::new();
 	oriented.insert(0, scanners[0].clone());
+
 	let mut completed = HashSet::new();
 
 	// Part 2 - Manhattan distances.
@@ -153,21 +155,33 @@ fn main() {
 				continue;
 			}
 
-			for (j, second) in scanners.iter().enumerate() {
-				// Don't want to check against ourselves or against one we
-				// already have oriented.
-				if i == j || oriented.contains_key(&j.clone()) {
-					continue;
-				}
-
-				// Try to match and if we found one, update our information.
-				let found = attempt_match(oriented.get(&i).unwrap(), second);
-				if let Some((found, position)) = found {
+			// This is a bit uglier but uses rayon to check all at the
+			// same time.
+			scanners
+				.par_iter()
+				.enumerate()
+				// We don't want to check against ourselves or one
+				// that's already been found.
+				.filter(|(j, _)| i != *j && !oriented.contains_key(&j.clone()))
+				.filter_map(|(j, second)| {
+					if let Some((found, position)) =
+						attempt_match(oriented.get(&i).unwrap(), second)
+					{
+						Some((j, found, position))
+					} else {
+						None
+					}
+				})
+				// We collect because we'd have to mutably borrow
+				// these. and the mutex is a bit funky because we use
+				// them above as well.
+				.collect::<Vec<(usize, Scanner, Point)>>()
+				.iter()
+				.for_each(|(j, found, position)| {
 					println!("found: {} {} {}", i, j, completed.len());
-					oriented.insert(j, found);
-					positions.push(position)
-				}
-			}
+					oriented.insert(*j, found.clone());
+					positions.push(*position);
+				});
 
 			completed.insert(i.clone());
 		}
